@@ -1,5 +1,5 @@
-use std::env;
 use std::fs;
+use std::io::{self, Write};
 use std::path::Path;
 
 fn load_tasks() -> Vec<String> {
@@ -19,36 +19,61 @@ fn add_task(task: String, tasks: &mut Vec<String>) {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    println!("{:?}", args);
-
     let mut tasks = load_tasks();
 
-    if args.len() < 2 {
-        println!("Usage: todo-cli <add|delete|print> [task]");
-        return;
-    }
+    loop {
+        print!("todo> ");
+        io::stdout().flush().unwrap();
 
-    match args[1].as_str() {
-        "add" => {
-            if args.len() < 3 {
-                println!("Please provide a task to add.");
-            } else {
-                add_task(args[2].clone(), &mut tasks);
-                println!("Task added: {}", args[2]);
+        let mut input = String::new();
+        if io::stdin().read_line(&mut input).is_err() {
+            println!("Failed to read input.");
+            continue;
+        }
+        let input = input.trim();
+        if input.eq_ignore_ascii_case("stop") || input.eq_ignore_ascii_case("exit") {
+            println!("Exiting...");
+            break;
+        }
+        let args: Vec<&str> = input.split_whitespace().collect();
+        if args.is_empty() {
+            continue;
+        }
+
+        match args[0] {
+            "add" => {
+                if args.len() < 2 {
+                    println!("Please provide a task to add.");
+                } else {
+                    let task = args[1..].join(" ");
+                    add_task(task, &mut tasks);
+                    println!("Task added.");
+                }
             }
-        }
-         "finish" => {
-            println!("Delete not implemented yet.");
-        }
-        "print" => {
-            println!("Tasks:");
-            for (i, task) in tasks.iter().enumerate() {
-                println!("{}: {}", i + 1, task);
+            "finish" => {
+                if args.len() < 2 {
+                    println!("Please provide the index of the task to finish.");
+                } else {
+                    match args[1].parse::<usize>() {
+                        Ok(idx) if idx > 0 && idx <= tasks.len() => {
+                            let removed = tasks.remove(idx - 1);
+                            let data = serde_json::to_string_pretty(&tasks).expect("Failed to serialize tasks");
+                            fs::write("todo.json", data).expect("Unable to write file");
+                            println!("Finished task: {}", removed);
+                        }
+                        _ => println!("Invalid index."),
+                    }
+                }
             }
-        }
-        _ => {
-            println!("Unknown command: {}", args[1]);
+            "print" => {
+                println!("Tasks:");
+                for (i, task) in tasks.iter().enumerate() {
+                    println!("{}: {}", i + 1, task);
+                }
+            }
+            _ => {
+                println!("Unknown command: {}", args[0]);
+            }
         }
     }
 }
